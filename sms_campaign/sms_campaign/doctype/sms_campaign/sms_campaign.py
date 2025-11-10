@@ -84,6 +84,7 @@ class SMSCampaign(Document):
 
 	
 	def send_triggered_sms(self, doc_name):
+		frappe.db.commit()
 		parameters = {}
 		parameters[frappe.db.get_value("SMS Campaign Query", self.query, "doc_name_field")] = doc_name
 		for param in self.params:
@@ -102,6 +103,13 @@ class SMSCampaign(Document):
 	def send_sms(self, parameters):
 		query = frappe.get_doc("SMS Campaign Query", self.query)
 
+		doctype = None
+		doctype_ref = None
+
+		if self.attachments:
+			doctype = self.attachments[0].reference_doctype
+			doctype_ref = self.attachments[0].reference_name_field
+
 		if self.channel == 'SMS':
 			frappe.enqueue(
 				"sms_campaign.sms_campaign.queue.send_sms_queued",
@@ -111,13 +119,31 @@ class SMSCampaign(Document):
 				parameters=parameters,
 				template=self.message
 			)
-		else:
+		elif self.channel == 'Email':
 			send_email(
 				query=query,
 				parameters=parameters,
 				template=self.message,
 				subject=self.email_subject,
 				attachments=self.attachments,
+			)
+		elif self.channel == 'Whatsapp':
+			send_whatsapp_message(
+				query=query,
+				parameters=parameters,
+				template=self.message,
+				subject=self.email_subject,
+				doctype=doctype,
+				reference_name=doctype_ref,
+			)
+
+		elif self.channel == 'Raven':
+			send_raven_message(
+				query=query,
+				parameters=parameters,
+				template=self.message,
+				doctype=doctype,
+				reference_name=doctype_ref,
 			)
 
 		# data = frappe.db.sql(query.query, parameters, as_dict=True)
@@ -134,23 +160,23 @@ class SMSCampaign(Document):
 						
 
 def format_phone_number(mobile_number):
-    if mobile_number is None:
-        return None
-       
-    if len(mobile_number) == 10:
-        return "254" + mobile_number[1:]
-    elif len(mobile_number) == 9:
-        return "254" + mobile_number
-    elif len(mobile_number) == 12:
-        return "254" + mobile_number[3:]
-    elif len(mobile_number) == 13:
-        return "254" + mobile_number[4:]
-    elif len(mobile_number) == 11:
-        return "254" + mobile_number[2:]
-    elif len(mobile_number) == 14:
-        return "254" + mobile_number[5:]
+	if mobile_number is None:
+		return None
+	   
+	if len(mobile_number) == 10:
+		return "254" + mobile_number[1:]
+	elif len(mobile_number) == 9:
+		return "254" + mobile_number
+	elif len(mobile_number) == 12:
+		return "254" + mobile_number[3:]
+	elif len(mobile_number) == 13:
+		return "254" + mobile_number[4:]
+	elif len(mobile_number) == 11:
+		return "254" + mobile_number[2:]
+	elif len(mobile_number) == 14:
+		return "254" + mobile_number[5:]
 
-    return None
+	return None
 
 def get_context(data):
 	data["nowdate"] = frappe.utils.nowdate
@@ -225,39 +251,100 @@ def eval_condition(campaign):
 
 			
 def send_email(query, parameters, template, subject, attachments):
-    data = frappe.db.sql(query.query, parameters, as_dict=True)
-    for row in data:
-        email = row[query.recepient_field]
-        msg=frappe.render_template(template, get_context(row))
-        subj = frappe.render_template(subject, get_context(row))
+	data = frappe.db.sql(query.query, parameters, as_dict=True)
+	for row in data:
+		email = row[query.recepient_field]
+		bcc = row[query.bcc_field].split(",") if query.bcc_field else []
+		cc = row[query.cc_field].split(",") if query.cc_field else []
+		msg=frappe.render_template(template, get_context(row))
+		subj = frappe.render_template(subject, get_context(row))
 
-        attachs = []
+		attachs = []
 
-        for att in attachments:
-            if att.type == 'File':
-                files = frappe.get_all("File", filters ={"file_url": row[att.file_url_field]})
+		for att in attachments:
+			if att.type == 'File':
+				files = frappe.get_all("File", filters ={"file_url": row[att.file_url_field]})
 
-                if len(files) > 0:
-                    file = file[0]
-                    file_doc = frappe.get_doc("File", file.name)
+				if len(files) > 0:
+					file = file[0]
+					file_doc = frappe.get_doc("File", file.name)
 
 
-                    filename = file_doc.file_name
+					filename = file_doc.file_name
 
-                    file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
-                    with open(file_path, "rb") as file_content:
-                        attachs.append({"fcontent": file_content.read(), "fname": filename})
-            else:
-                attachs.append({frappe.attach_print(att.print_doctype, row[att.name_query_field], file_name=row[att.name_query_field])})
+					file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
+					with open(file_path, "rb") as file_content:
+						attachs.append({"fcontent": file_content.read(), "fname": filename})
+			else:
+				attachs.append({frappe.attach_print(att.print_doctype, row[att.name_query_field], file_name=row[att.name_query_field])})
 
-        
-        
-        if email:
-            receiver_list = [email]
-            frappe.sendmail(
-                recipients=receiver_list,
-                message=msg,
-                subject=subj,
-                attachments=attachs,
-            )
-            frappe.db.commit()
+		
+		
+		if email:
+			receiver_list = [email]
+			frappe.sendmail(
+				recipients=receiver_list,
+				message=msg,
+				subject=subj,
+				cc=cc,
+				bcc=bcc,
+				attachments=attachs,
+			)
+			frappe.db.commit()
+
+def send_whatsapp_message(query, parameters, template, doctype = None, reference_name = None):
+	"""Send whatsapp message via frappe_whatsapp"""
+	data = frappe.db.sql(query.query, parameters, as_dict=True)
+	for row in data:
+		recipient = format_phone_number(row[query.recepient_field])
+		msg=frappe.render_template(template, get_context(row))
+		bot = frappe.get_doc("WhatsApp Bot", query.whatsapp_bot)
+
+		doc = frappe.get_doc({
+				"doctype": "WhatsApp Message",
+				"to": recipient,
+				"type": "Outgoing",
+				"message_type": "Manual",
+				"reference_doctype": doctype,
+				"reference_name": reference_name,
+				"content_type": "text",
+			})
+
+		doc.save()
+
+def send_raven_message(query, parameters, template, attachments, doctype = None, reference_name = None):
+	"""Send raven message via frappe_raven"""
+	data = frappe.db.sql(query.query, parameters, as_dict=True)
+	for row in data:
+		recipient = row[query.recepient_field]
+		msg=frappe.render_template(template, get_context(row))
+		bot = frappe.get_doc("Raven Bot", query.raven_bot)
+		attachs = []
+
+		for att in attachments:
+			if att.type == 'File':
+				files = frappe.get_all("File", filters ={"file_url": row[att.file_url_field]})
+
+				if len(files) > 0:
+					file = file[0]
+					file_doc = frappe.get_doc("File", file.name)
+
+
+					filename = file_doc.file_name
+
+					file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
+					with open(file_path, "rb") as file_content:
+						attachs.append({"fcontent": file_content.read(), "fname": filename})
+			else:
+				attachs.append({frappe.attach_print(att.print_doctype, row[att.name_query_field], file_name=row[att.name_query_field])})
+
+		if recipient:
+			bot.send_message(
+				channel_id=recipient,
+				text=msg,
+				markdown=True,
+				link_doctype = doctype,
+				link_document = reference_name,				
+			)
+		
+
