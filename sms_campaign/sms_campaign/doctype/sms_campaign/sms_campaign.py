@@ -254,8 +254,8 @@ def send_email(query, parameters, template, subject, attachments):
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
 	for row in data:
 		email = row[query.recepient_field]
-		bcc = row[query.bcc_field].split(",") if query.bcc_field else []
-		cc = row[query.cc_field].split(",") if query.cc_field else []
+		bcc = row[query.bcc_emails].split(",") if query.bcc_emails else []
+		cc = row[query.cc_emails].split(",") if query.cc_emails else []
 		msg=frappe.render_template(template, get_context(row))
 		subj = frappe.render_template(subject, get_context(row))
 
@@ -277,8 +277,6 @@ def send_email(query, parameters, template, subject, attachments):
 						attachs.append({"fcontent": file_content.read(), "fname": filename})
 			else:
 				attachs.append({frappe.attach_print(att.print_doctype, row[att.name_query_field], file_name=row[att.name_query_field])})
-
-		
 		
 		if email:
 			receiver_list = [email]
