@@ -14,7 +14,6 @@
   "new_value",
   "column_break_ilxuj",
   "channel",
-  "raven_bot",
   "active",
   "query",
   "trigger",
@@ -190,7 +189,7 @@
    "fieldname": "channel",
    "fieldtype": "Select",
    "label": "Channel",
-   "options": "SMS\nEmail"
+   "options": "SMS\nEmail\nRaven\nWhatsapp"
   },
   {
    "depends_on": "eval:doc.channel=='Email'",
@@ -199,7 +198,7 @@
    "label": "Subject Params"
   },
   {
-   "depends_on": "eval:doc.channel !=\"SMS\"",
+   "depends_on": "eval:doc.channel==\"Email\"",
    "fieldname": "attachments",
    "fieldtype": "Table",
    "label": "Attachments",
@@ -216,20 +215,13 @@
    "fieldname": "new_value",
    "fieldtype": "Data",
    "label": "To Value"
-  },
-  {
-   "depends_on": "eval: doc.channel == \"Raven\"",
-   "fieldname": "raven_bot",
-   "fieldtype": "Data",
-   "label": "Raven Bot",
-   "mandatory_depends_on": "eval: doc.channel == \"Raven\""
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-11-10 12:09:42.511565",
+ "modified": "2025-11-12 12:18:39.790270",
  "modified_by": "Administrator",
  "module": "Sms Campaign",
  "name": "SMS Campaign",

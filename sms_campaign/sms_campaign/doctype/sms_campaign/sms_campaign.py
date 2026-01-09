@@ -138,13 +138,19 @@ class SMSCampaign(Document):
 			)
 
 		elif self.channel == 'Raven':
-			send_raven_message(
-				query=query,
-				parameters=parameters,
-				template=self.message,
-				doctype=doctype,
-				reference_name=doctype_ref,
-			)
+			try:
+				send_raven_message(
+					query=query,
+					parameters=parameters,
+					template=self.message,
+					attachments=self.attachments or [],
+					doctype=doctype,
+					reference_name=doctype_ref,
+				)
+			except Exception:
+				frappe.log_error(
+					frappe.get_traceback(), "Raven SMS Campaign Failed"
+				)
 
 		# data = frappe.db.sql(query.query, parameters, as_dict=True)
 		# for row in data:
@@ -310,8 +316,9 @@ def send_whatsapp_message(query, parameters, template, doctype = None, reference
 
 		doc.save()
 
-def send_raven_message(query, parameters, template, attachments, doctype = None, reference_name = None):
+def send_raven_message(query, parameters, template, attachments = None, doctype = None, reference_name = None):
 	"""Send raven message via frappe_raven"""
+	attachments = attachments or []
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
 	for row in data:
 		recipient = row[query.recepient_field]
