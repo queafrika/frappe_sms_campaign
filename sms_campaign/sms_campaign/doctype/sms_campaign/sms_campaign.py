@@ -138,8 +138,11 @@ class SMSCampaign(Document):
 			)
 
 		elif self.channel == 'Raven':
+			if not self.raven_bot:
+				frappe.throw("Please select a Raven Bot for this campaign.")
 			try:
 				send_raven_message(
+					campaign=self,
 					query=query,
 					parameters=parameters,
 					template=self.message,
@@ -316,14 +319,14 @@ def send_whatsapp_message(query, parameters, template, doctype = None, reference
 
 		doc.save()
 
-def send_raven_message(query, parameters, template, attachments = None, doctype = None, reference_name = None):
+def send_raven_message(campaign, query, parameters, template, attachments = None, doctype = None, reference_name = None):
 	"""Send raven message via frappe_raven"""
 	attachments = attachments or []
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
 	for row in data:
 		recipient = row[query.recepient_field]
 		msg=frappe.render_template(template, get_context(row))
-		bot = frappe.get_doc("Raven Bot", query.raven_bot)
+		bot = frappe.get_doc("Raven Bot", campaign.raven_bot)
 		attachs = []
 
 		for att in attachments:

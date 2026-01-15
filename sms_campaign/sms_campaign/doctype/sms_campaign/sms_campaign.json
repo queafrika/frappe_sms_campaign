@@ -18,6 +18,7 @@
   "query",
   "trigger",
   "value_changed",
+  "raven_bot",
   "section_break_vtpfy",
   "params",
   "section_break_v9fde",
@@ -215,13 +216,19 @@
    "fieldname": "new_value",
    "fieldtype": "Data",
    "label": "To Value"
+  },
+  {
+   "fieldname": "raven_bot",
+   "fieldtype": "Link",
+   "label": "Raven Bot",
+   "options": "Raven Bot"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2025-11-12 12:18:39.790270",
+ "modified": "2026-01-14 15:12:02.579186",
  "modified_by": "Administrator",
  "module": "Sms Campaign",
  "name": "SMS Campaign",
