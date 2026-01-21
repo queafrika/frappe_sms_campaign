@@ -319,40 +319,66 @@ def send_whatsapp_message(query, parameters, template, doctype = None, reference
 
 		doc.save()
 
-def send_raven_message(campaign, query, parameters, template, attachments = None, doctype = None, reference_name = None):
-	"""Send raven message via frappe_raven"""
+def send_raven_message(campaign, query, parameters, template, attachments=None, doctype=None, reference_name=None):
 	attachments = attachments or []
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
+
+	bot = frappe.get_doc("Raven Bot", campaign.raven_bot)
+
 	for row in data:
-		recipient = row[query.recepient_field]
-		msg=frappe.render_template(template, get_context(row))
-		bot = frappe.get_doc("Raven Bot", campaign.raven_bot)
+		recipient = row.get(query.recepient_field)
+		msg = frappe.render_template(template, get_context(row))
 		attachs = []
 
 		for att in attachments:
-			if att.type == 'File':
-				files = frappe.get_all("File", filters ={"file_url": row[att.file_url_field]})
-
-				if len(files) > 0:
-					file = file[0]
+			if att.type == "File":
+				files = frappe.get_all("File", filters={"file_url": row.get(att.file_url_field)})
+				if files:
+					file = files[0]
 					file_doc = frappe.get_doc("File", file.name)
-
-
 					filename = file_doc.file_name
-
 					file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
 					with open(file_path, "rb") as file_content:
 						attachs.append({"fcontent": file_content.read(), "fname": filename})
 			else:
-				attachs.append({frappe.attach_print(att.print_doctype, row[att.name_query_field], file_name=row[att.name_query_field])})
+				attachs.append(
+					frappe.attach_print(
+						att.print_doctype,
+						row.get(att.name_query_field),
+						file_name=row.get(att.name_query_field),
+					)
+				)
 
-		if recipient:
-			bot.send_message(
-				channel_id=recipient,
-				text=msg,
-				markdown=True,
-				link_doctype = doctype,
-				link_document = reference_name,				
+		if not recipient:
+			continue
+
+		common_kwargs = dict(
+			text=msg,
+			markdown=True,
+			link_doctype=doctype,
+			link_document=reference_name,
+		)
+
+		if isinstance(recipient, str) and "@" in recipient:
+			if not frappe.db.exists("User", recipient):
+				frappe.log_error(f"User not found: {recipient}", "Raven SMS Campaign - Missing User")
+				continue
+
+			raven_user = frappe.db.get_value(
+				"Raven User",
+				{"type": "User", "user": recipient, "enabled": 1},
+				"name",
 			)
-		
+			if not raven_user:
+				frappe.log_error(
+					f"Raven User not found or disabled for: {recipient}",
+					"Raven SMS Campaign - Missing Raven User",
+				)
+				continue
 
+			try:
+				bot.send_message(channel_type="User", user=recipient, **common_kwargs)
+			except TypeError:
+				bot.send_message(channel_type="User", to_user=recipient, **common_kwargs)
+		else:
+			bot.send_message(channel_id=recipient, **common_kwargs)
