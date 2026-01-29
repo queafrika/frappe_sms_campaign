@@ -319,23 +319,41 @@ def send_whatsapp_message(query, parameters, template, doctype = None, reference
 
 		doc.save()
 
+def _normalize(s: str) -> str:
+	return (s or "").strip()
+
+def _normalize_email(s: str) -> str:
+	return (s or "").strip().lower()
+
 def send_raven_message(campaign, query, parameters, template, attachments=None, doctype=None, reference_name=None):
 	attachments = attachments or []
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
 
 	bot = frappe.get_doc("Raven Bot", campaign.raven_bot)
 
-	for row in data:
-		recipient = row.get(query.recepient_field)
-		msg = frappe.render_template(template, get_context(row))
-		attachs = []
+	# Native Raven requires bot.raven_user to exist
+	if not getattr(bot, "raven_user", None):
+		frappe.log_error(
+			f"Raven Bot {bot.name} has no raven_user linked. Open the Raven Bot and Save it once.",
+			"Raven SMS Campaign - Bot Misconfigured",
+		)
+		return
 
+	for row in data:
+		recipient = _normalize(row.get(query.recepient_field))
+		if not recipient:
+			continue
+
+		msg = frappe.render_template(template, get_context(row))
+
+		# keep your attachment building (even if not used by RavenBot.send_message directly)
+		attachs = []
 		for att in attachments:
 			if att.type == "File":
 				files = frappe.get_all("File", filters={"file_url": row.get(att.file_url_field)})
 				if files:
-					file = files[0]
-					file_doc = frappe.get_doc("File", file.name)
+					f = files[0]
+					file_doc = frappe.get_doc("File", f.name)
 					filename = file_doc.file_name
 					file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
 					with open(file_path, "rb") as file_content:
@@ -349,9 +367,6 @@ def send_raven_message(campaign, query, parameters, template, attachments=None, 
 					)
 				)
 
-		if not recipient:
-			continue
-
 		common_kwargs = dict(
 			text=msg,
 			markdown=True,
@@ -359,26 +374,141 @@ def send_raven_message(campaign, query, parameters, template, attachments=None, 
 			link_document=reference_name,
 		)
 
-		if isinstance(recipient, str) and "@" in recipient:
-			if not frappe.db.exists("User", recipient):
-				frappe.log_error(f"User not found: {recipient}", "Raven SMS Campaign - Missing User")
+		# DM (native) — Raven creates/gets DM channel internally
+		if "@" in recipient:
+			user_id = _normalize_email(recipient)
+
+			if not frappe.db.exists("User", user_id):
+				frappe.log_error(f"User not found: {user_id}", "Raven SMS Campaign - Missing User")
 				continue
 
-			raven_user = frappe.db.get_value(
+			# ensure Raven User exists + enabled
+			if not frappe.db.get_value(
 				"Raven User",
-				{"type": "User", "user": recipient, "enabled": 1},
+				{"type": "User", "user": user_id, "enabled": 1},
 				"name",
-			)
-			if not raven_user:
+			):
 				frappe.log_error(
-					f"Raven User not found or disabled for: {recipient}",
+					f"Raven User not found/disabled for: {user_id}",
 					"Raven SMS Campaign - Missing Raven User",
 				)
 				continue
 
 			try:
-				bot.send_message(channel_type="User", user=recipient, **common_kwargs)
-			except TypeError:
-				bot.send_message(channel_type="User", to_user=recipient, **common_kwargs)
-		else:
+				bot.send_direct_message(user_id=user_id, **common_kwargs)
+			except Exception:
+				frappe.log_error(frappe.get_traceback(), f"Raven DM send failed for: {user_id}")
+			continue
+
+		try:
 			bot.send_message(channel_id=recipient, **common_kwargs)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"Raven Channel send failed for: {recipient}")
+
+#def _get_raven_user_name(user_email: str) -> str | None:
+	# In THE system Raven User.name == email
+#	if frappe.db.exists("Raven User", user_email):
+#		return user_email
+#	return frappe.db.get_value("Raven User", {"type": "User", "user": user_email, "enabled": 1}, "name")
+
+#def _get_or_create_dm_channel_id(bot_email: str, recipient_email: str) -> str:
+#	bot_ru = _get_raven_user_name(bot_email)
+#	rec_ru = _get_raven_user_name(recipient_email)
+
+#	if not bot_ru:
+#		frappe.throw(f"Raven User Missing/Disabled for bot user: {bot_email}")
+#	if not rec_ru:
+#		frappe.throw(f"Raven User Missing/Disabled for recipient: {recipient_email}")
+
+#	existing = frappe.db.get_value(
+#		"Raven Channel",
+#		{
+#			"is_direct_message": 1,
+#			"is_archived": 0,
+#
+# 			"dm_user_1": ["in", [bot_ru, rec_ru]],
+#			"dm_user_2": ["in", [bot_ru, rec_ru]],
+#		},
+#		"name",
+#	)
+#	if existing:
+#		return existing
+
+#	ch = frappe.get_doc({
+#		"doctype": "Raven Channel",
+#		"type": "Private",
+#		"is_direct_message": 1,
+#		"is_archived": 0,
+#		"is_synced": 0,
+#		"dm_user_1": bot_ru,
+#		"dm_user_2": rec_ru,
+#		"channel_name": f"{bot_email} _ {recipient_email}",
+#	})
+#	ch.insert(ignore_permissions=True)
+#	return ch.name
+
+#def send_raven_message(campaign, query, parameters, template, attachments=None, doctype=None, reference_name=None):
+#	attachments = attachments or []
+#	data = frappe.db.sql(query.query, parameters, as_dict=True)
+#
+#	bot = frappe.get_doc("Raven Bot", campaign.raven_bot)
+#
+#	for row in data:
+#		recipient = row.get(query.recepient_field)
+#		msg = frappe.render_template(template, get_context(row))
+#		attachs = []
+#
+#		for att in attachments:
+#			if att.type == "File":
+#				files = frappe.get_all("File", filters={"file_url": row.get(att.file_url_field)})
+#				if files:
+#					file = files[0]
+#					file_doc = frappe.get_doc("File", file.name)
+#					filename = file_doc.file_name
+#					file_path = frappe.utils.get_site_path("", file_doc.file_url.lstrip("/"))
+#					with open(file_path, "rb") as file_content:
+#						attachs.append({"fcontent": file_content.read(), "fname": filename})
+#			else:
+#				attachs.append(
+#					frappe.attach_print(
+#						att.print_doctype,
+#						row.get(att.name_query_field),
+#						file_name=row.get(att.name_query_field),
+#					)
+#				)
+#
+#		if not recipient:
+#			continue
+#
+#		common_kwargs = dict(
+#			text=msg,
+#			markdown=True,
+#			link_doctype=doctype,
+#			link_document=reference_name,
+#		)
+#
+#		if isinstance(recipient, str) and "@" in recipient:
+#			if not frappe.db.exists("User", recipient):
+#				frappe.log_error(f"User not found: {recipient}", "Raven SMS Campaign - Missing User")
+#				continue
+#
+#			raven_user = frappe.db.get_value(
+#				"Raven User",
+#				{"type": "User", "user": recipient, "enabled": 1},
+#				"name",
+##			)
+#			if not raven_user:
+#				frappe.log_error(
+#					f"Raven User not found or disabled for: {recipient}",
+#					"Raven SMS Campaign - Missing Raven User",
+#				)
+#				continue
+#
+#			bot_email = getattr(bot, "user", None) or getattr(bot, "owner", None)
+#			if not bot_email or "@" not in bot_email:
+#				frappe.log_error(f"Bot email missing on Raven Bot: {bot.name}", "Raven SMS Campaign - Bot Misconfigured")
+#				continue
+#			dm_channel_id = _get_or_create_dm_channel_id(bot_email, recipient)
+#			bot.send_message(channel_id=dm_channel_id, **common_kwargs)
+##		else:
+#			bot.send_message(channel_id=recipient, **common_kwargs)
