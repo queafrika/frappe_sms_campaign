@@ -405,13 +405,13 @@ def send_raven_message(campaign, query, parameters, template, attachments=None, 
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"Raven Channel send failed for: {recipient}")
 
-#def _get_raven_user_name(user_email: str) -> str | None:
+# def _get_raven_user_name(user_email: str) -> str | None:
 	# In THE system Raven User.name == email
 #	if frappe.db.exists("Raven User", user_email):
 #		return user_email
 #	return frappe.db.get_value("Raven User", {"type": "User", "user": user_email, "enabled": 1}, "name")
 
-#def _get_or_create_dm_channel_id(bot_email: str, recipient_email: str) -> str:
+# def _get_or_create_dm_channel_id(bot_email: str, recipient_email: str) -> str:
 #	bot_ru = _get_raven_user_name(bot_email)
 #	rec_ru = _get_raven_user_name(recipient_email)
 
@@ -447,7 +447,7 @@ def send_raven_message(campaign, query, parameters, template, attachments=None, 
 #	ch.insert(ignore_permissions=True)
 #	return ch.name
 
-#def send_raven_message(campaign, query, parameters, template, attachments=None, doctype=None, reference_name=None):
+# def send_raven_message(campaign, query, parameters, template, attachments=None, doctype=None, reference_name=None):
 #	attachments = attachments or []
 #	data = frappe.db.sql(query.query, parameters, as_dict=True)
 #
