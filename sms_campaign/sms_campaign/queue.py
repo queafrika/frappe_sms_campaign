@@ -2,6 +2,23 @@ import frappe;
 from frappe.core.doctype.sms_settings.sms_settings import send_sms
 from frappe.utils.safe_exec import get_safe_globals
 
+def outgoing_email_configured():
+    """
+    True when frappe can resolve an outgoing Email Account.
+
+    Same lookup frappe.sendmail performs, minus the throw, so campaigns can be
+    skipped instead of failing with "Please setup default outgoing Email
+    Account from Tools > Email Account".
+    """
+    from frappe.email.doctype.email_account.email_account import EmailAccount
+
+    try:
+        return bool(EmailAccount.find_outgoing())
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "Outgoing email account lookup failed")
+        return False
+
+
 def send_sms_queued(query, parameters, template):
 
     data = frappe.db.sql(query.query, parameters, as_dict=True)
@@ -16,6 +33,12 @@ def send_sms_queued(query, parameters, template):
             frappe.db.commit()
 
 def send_email_queued(query, parameters, template, subject, attachments):
+    if not outgoing_email_configured():
+        frappe.logger().warning(
+            "Email campaign skipped — no outgoing Email Account configured"
+        )
+        return
+
     data = frappe.db.sql(query.query, parameters, as_dict=True)
     for row in data:
         email = row[query.recepient_field]

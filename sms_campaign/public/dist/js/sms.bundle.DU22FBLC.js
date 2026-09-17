@@ -1,5 +1,5 @@
 (() => {
-  // frappe-html:/home/amcco/frappe-bench/apps/sms_campaign/sms_campaign/templates/sms_list.html
+  // frappe-html:/home/erpnext/frappe-bench/apps/sms_campaign/sms_campaign/templates/sms_list.html
   frappe.templates["sms_list"] = `<style>
     table.sms-list {
       font-family: arial, sans-serif;
@@ -43,7 +43,7 @@
     </tbody>
 </table>`;
 
-  // frappe-html:/home/amcco/frappe-bench/apps/sms_campaign/sms_campaign/templates/sms_param_list.html
+  // frappe-html:/home/erpnext/frappe-bench/apps/sms_campaign/sms_campaign/templates/sms_param_list.html
   frappe.templates["sms_param_list"] = `<div class="clearfix"></div>
 <div style="display: flex; padding: 5px; justify-content: space-around; flex-wrap: wrap; background-color: #eeeeee">
     {% for col in columns %}
@@ -53,4 +53,4 @@
     {% endfor %}
 </div>`;
 })();
-//# sourceMappingURL=sms.bundle.34NI7KYC.js.map
+//# sourceMappingURL=sms.bundle.DU22FBLC.js.map

@@ -260,6 +260,14 @@ def eval_condition(campaign):
 
 			
 def send_email(query, parameters, template, subject, attachments):
+	from sms_campaign.sms_campaign.queue import outgoing_email_configured
+
+	if not outgoing_email_configured():
+		frappe.logger().warning(
+			"Email campaign skipped — no outgoing Email Account configured"
+		)
+		return
+
 	data = frappe.db.sql(query.query, parameters, as_dict=True)
 	for row in data:
 		email = row[query.recepient_field]
