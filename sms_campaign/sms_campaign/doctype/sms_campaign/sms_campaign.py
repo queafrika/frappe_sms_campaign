@@ -48,7 +48,12 @@ class SMSCampaign(Document):
 
 		else:
 			parameters = {}
-			doc = frappe.get_all(self.trigger_doctype, ("name"), limit=1, order_by="creation desc")[0]
+			latest = frappe.get_all(self.trigger_doctype, ("name"), limit=1, order_by="creation desc")
+			if not latest:
+				# nothing to preview against until the first record exists
+				frappe.msgprint(f"There is no {self.trigger_doctype} yet, so no preview can be shown.", title="Nothing to preview")
+				return
+			doc = latest[0]
 			parameters[frappe.db.get_value("SMS Campaign Query", self.query, "doc_name_field")] = doc.name
 			for param in self.params:
 				parameters[param.label] = param.value
